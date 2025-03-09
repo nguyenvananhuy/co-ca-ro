@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Caro Game</title>
+    <script src="https://cdn.socket.io/4.0.1/socket.io.min.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; text-align: center; background-color: #f4f4f4; }
+        .board { 
+            display: grid; 
+            grid-template-columns: repeat(15, 40px); 
+            gap: 2px; 
+            margin: 20px auto; 
+            background-color: #ddd;
+            padding: 10px;
+            border-radius: 10px;
+            border: 2px solid #333;
+        }
+        .cell { 
+            width: 40px; 
+            height: 40px; 
+            border: 1px solid black; 
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            font-size: 20px; 
+            cursor: pointer; 
+            background-color: #fff;
+        }
+        button {
+            padding: 10px;
+            margin: 5px;
+            font-size: 16px;
+            background-color: #28a745;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #218838;
+        }
+    </style>
+    <script>
+        const socket = io();
+        let isSinglePlayer = false;
+        let playerRank = "tân binh";
+
+        function withdrawPi() {
+            if (isSinglePlayer) {
+                alert("Không thể rút Pi khi chơi với bot!");
+                return;
+            }
+            const amount = parseFloat(document.getElementById("amount").value);
+            const wallet = document.getElementById("wallet").value;
+            if (amount <= 0 || !wallet) {
+                alert("Vui lòng nhập số tiền hợp lệ và địa chỉ ví!");
+                return;
+            }
+            fetch("/withdraw", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ amount, wallet })
+            })
+            .then(response => response.json())
+            .then(data => alert("Transaction Status: " + JSON.stringify(data)))
+            .catch(error => alert("Lỗi giao dịch: " + error));
+        }
+        
+        function createBoard() {
+            const board = document.getElementById("board");
+            board.innerHTML = "";
+            for (let i = 0; i < 15; i++) {
+                for (let j = 0; j < 15; j++) {
+                    let cell = document.createElement("div");
+                    cell.classList.add("cell");
+                    cell.dataset.row = i;
+                    cell.dataset.col = j;
+                    cell.addEventListener("click", () => makeMove(i, j));
+                    board.appendChild(cell);
+                }
+            }
+        }
+
+        function makeMove(row, col) {
+            socket.emit("play_move", { row, col, player: "X" });
+            if (isSinglePlayer) {
+                setTimeout(() => botMove(), 500);
+            }
+        }
+
+        function botMove() {
+            let emptyCells = Array.from(document.querySelectorAll(".cell")).filter(cell => !cell.textContent);
+            if (emptyCells.length > 0) {
+                let bestMove = selectBotMove();
+                let row = bestMove.row;
+                let col = bestMove.col;
+                let cell = document.querySelector(`.cell[data-row='${row}'][data-col='${col}']`);
+                cell.textContent = "O";
+                socket.emit("play_move", { row, col, player: "O" });
+            }
+        }
+
+        function selectBotMove() {
+            let emptyCells = Array.from(document.querySelectorAll(".cell")).filter(cell => !cell.textContent);
+            if (playerRank === "tân binh") {
+                return emptyCells[Math.floor(Math.random() * emptyCells.length)];
+            } else if (playerRank === "trung cấp") {
+                return emptyCells[Math.floor(Math.random() * emptyCells.length * 0.5)];
+            } else {
+                return emptyCells[0];
+            }
+        }
+
+        socket.on("update_board", (boardState) => {
+            document.querySelectorAll(".cell").forEach(cell => {
+                let row = cell.dataset.row;
+                let col = cell.dataset.col;
+                cell.textContent = boardState[row][col] || "";
+            });
+        });
+
+        function startSinglePlayer(rank) {
+            isSinglePlayer = true;
+            playerRank = rank;
+            createBoard();
+        }
+
+        function startMultiplayer() {
+            isSinglePlayer = false;
+            createBoard();
+        }
+
+        window.onload = createBoard;
+    </script>
+</head>
+<body>
+    <h1>Welcome to Caro Game</h1>
+    <button onclick="startSinglePlayer('tân binh')">Play vs Bot (Tân Binh)</button>
+    <button onclick="startSinglePlayer('trung cấp')">Play vs Bot (Trung Cấp)</button>
+    <button onclick="startSinglePlayer('cao cấp')">Play vs Bot (Cao Cấp)</button>
+    <button onclick="startMultiplayer()">Play Multiplayer</button>
+    <div class="board" id="board"></div>
+    <label>Amount:</label>
+    <input type="number" id="amount" placeholder="Enter amount">
+    <label>Wallet:</label>
+    <input type="text" id="wallet" placeholder="Enter wallet address">
+    <button onclick="withdrawPi()">Withdraw Pi</button>
+</body>
+</html>
